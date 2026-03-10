@@ -72,3 +72,17 @@ Here are a few other ways you can deploy this template:
 - If you want to utilize continuous deployment through GitHub webhooks, run the Netlify command `netlify init` to create a new project based on your repo or `netlify link` to connect your repo to an existing project
 
 Hope this template helps :) Happy coding 👩🏻‍💻!
+
+## Mini Kart (Localhost)
+
+Bu repoda bağımsız bir mini yarış oyunu eklendi: `public/mario-kart/index.html`.
+
+Bağımlılık kurmadan hızlıca oynamak için:
+
+```bash
+cd public/mario-kart
+python3 -m http.server 4173
+```
+
+Ardından tarayıcıda `http://127.0.0.1:4173` açın.
+
