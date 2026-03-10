@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Kart - Localhost Edition</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, Segoe UI, Roboto, Arial, sans-serif; }
+      body { margin: 0; background: radial-gradient(circle at top, #21395e, #101625 65%); color: #eef3ff; }
+      .wrap { min-height: 100vh; display: grid; place-items: center; padding: 14px; }
+      .game { width: min(980px, 96vw); background: rgba(7, 13, 24, 0.9); border: 2px solid #4d6ea7; border-radius: 14px; padding: 12px; box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35); }
+      h1 { margin: 4px 0 8px; font-size: 1.6rem; }
+      .hud { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+      .panel { display: flex; gap: 8px; flex-wrap: wrap; }
+      .chip { background: #19253f; border: 1px solid #345286; padding: 6px 10px; border-radius: 999px; font-size: 0.92rem; }
+      canvas { width: 100%; border: 3px solid #f1e780; border-radius: 10px; background: #202e1f; image-rendering: crisp-edges; }
+      .status { min-height: 22px; color: #ffe189; margin: 8px 0; }
+      .help { opacity: 0.9; margin: 0; font-size: 0.9rem; }
+      .actions { display: flex; gap: 8px; margin-top: 10px; }
+      button { border: 1px solid #446ba9; background: #243a5f; color: #eef3ff; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+      button:hover { background: #2d4a79; }
+      .mobile { display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; margin-top: 12px; justify-content: center; }
+      .mobile button { padding: 10px 0; }
+      .mobile .empty { visibility: hidden; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="game">
+        <h1>🏁 Mini Kart (Localhost)</h1>
+        <div class="hud">
+          <div class="panel">
+            <span class="chip" id="lap">Tur: 1/3</span>
+            <span class="chip" id="time">Süre: 0.0 sn</span>
+            <span class="chip" id="place">Sıra: 4</span>
+          </div>
+          <div class="actions"><button id="restartBtn">Yeniden Başlat</button></div>
+        </div>
+        <canvas id="track" width="920" height="560"></canvas>
+        <p class="status" id="status">Start çizgisini geç ve yarışı bitir!</p>
+        <p class="help">Klavye: W/↑ gaz, S/↓ fren, A/← sol, D/→ sağ. Mobilde alttaki butonlar kullanılabilir.</p>
+        <div class="mobile">
+          <button class="empty">•</button><button data-key="arrowup">↑</button><button class="empty">•</button>
+          <button data-key="arrowleft">←</button><button data-key="arrowdown">↓</button><button data-key="arrowright">→</button>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const canvas = document.getElementById('track');
+      const ctx = canvas.getContext('2d');
+      const lapEl = document.getElementById('lap');
+      const timeEl = document.getElementById('time');
+      const placeEl = document.getElementById('place');
+      const statusEl = document.getElementById('status');
+      const restartBtn = document.getElementById('restartBtn');
+      const center = { x: 460, y: 280 }, outer = { rx: 380, ry: 220 }, inner = { rx: 225, ry: 95 };
+      const mid = { rx: (outer.rx + inner.rx) / 2, ry: (outer.ry + inner.ry) / 2 }, totalLaps = 3;
+      const keys = new Set(), touchMap = new Map();
+
+      function createState() {
+        return { running: true, startedAt: performance.now(), lastAt: performance.now(), laps: 1, crossedCheckpoint: false,
+          player: { name: 'Sen', color: '#ff564f', angle: 0, speed: 0, lapsDone: 0 },
+          ai: [
+            { name: 'Luigi', color: '#59cc64', angle: 0.9, speed: 0.092, lapsDone: 0 },
+            { name: 'Peach', color: '#ff89ce', angle: 1.6, speed: 0.088, lapsDone: 0 },
+            { name: 'Toad', color: '#95e5ff', angle: 2.2, speed: 0.094, lapsDone: 0 }
+          ]
+        };
+      }
+      let state = createState();
+
+      const normalizeAngle = (a) => ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const ellipseValue = (x, y, rx, ry) => ((x - center.x) ** 2) / (rx ** 2) + ((y - center.y) ** 2) / (ry ** 2);
+      const onRoad = (x, y) => ellipseValue(x, y, outer.rx, outer.ry) <= 1 && ellipseValue(x, y, inner.rx, inner.ry) >= 1;
+      const kartPos = (angle) => ({ x: center.x + Math.cos(angle) * mid.rx, y: center.y + Math.sin(angle) * mid.ry });
+      const progress = (k) => k.lapsDone + normalizeAngle(k.angle) / (Math.PI * 2);
+
+      function updatePlayer(dt) {
+        const p = state.player;
+        const accel = keys.has('arrowup') || keys.has('w') ? 0.00065 : 0;
+        const brake = keys.has('arrowdown') || keys.has('s') ? 0.0011 : 0;
+        const steer = (keys.has('arrowright') || keys.has('d') ? 1 : 0) - (keys.has('arrowleft') || keys.has('a') ? 1 : 0);
+        p.speed += accel * dt; p.speed -= brake * dt; p.speed -= 0.00035 * dt; p.speed = Math.max(0, Math.min(0.23, p.speed));
+        p.angle += steer * (0.0032 + p.speed * 0.016) * dt; p.angle += p.speed * 0.65 * dt;
+        const pos = kartPos(p.angle); if (!onRoad(pos.x, pos.y)) p.speed *= 0.92;
+        const a = normalizeAngle(p.angle);
+        if (a > Math.PI * 0.9 && a < Math.PI * 1.1) state.crossedCheckpoint = true;
+        if (state.crossedCheckpoint && (a < 0.1 || a > Math.PI * 1.9)) {
+          state.crossedCheckpoint = false; p.lapsDone += 1; state.laps = Math.min(totalLaps, p.lapsDone + 1);
+          if (p.lapsDone >= totalLaps) { state.running = false; statusEl.textContent = `🏆 Yarış bitti! Süre: ${((performance.now() - state.startedAt) / 1000).toFixed(1)} sn`; }
+        }
+      }
+
+      function updateAi(dt) {
+        state.ai.forEach((bot, i) => {
+          bot.angle += (bot.speed + Math.sin(performance.now() / 500 + i) * 0.0006) * dt;
+          const a = normalizeAngle(bot.angle);
+          if (!bot.crossedCheckpoint && a > Math.PI * 0.9 && a < Math.PI * 1.1) bot.crossedCheckpoint = true;
+          if (bot.crossedCheckpoint && (a < 0.1 || a > Math.PI * 1.9)) { bot.crossedCheckpoint = false; bot.lapsDone += 1; }
+        });
+      }
+
+      function drawTrack() {
+        ctx.fillStyle = '#5eba66'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#3b3d45'; ctx.beginPath(); ctx.ellipse(center.x, center.y, outer.rx, outer.ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5eba66'; ctx.beginPath(); ctx.ellipse(center.x, center.y, inner.rx, inner.ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#f8ef9e'; ctx.lineWidth = 3; ctx.setLineDash([12, 12]);
+        ctx.beginPath(); ctx.ellipse(center.x, center.y, mid.rx, mid.ry, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#fff'; ctx.fillRect(center.x + outer.rx - 3, center.y - 45, 6, 90);
+      }
+
+      function drawKart(k) {
+        const pos = kartPos(k.angle);
+        ctx.save(); ctx.translate(pos.x, pos.y); ctx.rotate(k.angle + Math.PI / 2); ctx.fillStyle = k.color;
+        ctx.fillRect(-8, -12, 16, 24); ctx.fillStyle = '#121212'; ctx.fillRect(-8, -14, 16, 4); ctx.restore();
+      }
+
+      function updateHud(now) {
+        timeEl.textContent = `Süre: ${((now - state.startedAt) / 1000).toFixed(1)} sn`;
+        lapEl.textContent = `Tur: ${state.laps}/${totalLaps}`;
+        const ranking = [state.player, ...state.ai].sort((a, b) => progress(b) - progress(a));
+        const place = ranking.findIndex((k) => k.name === 'Sen') + 1;
+        placeEl.textContent = `Sıra: ${place}`;
+        if (state.running) statusEl.textContent = `${place}. sıradasın — tam gaz!`;
+      }
+
+      function loop(now) {
+        const dt = Math.min(32, now - state.lastAt); state.lastAt = now;
+        if (state.running) { updatePlayer(dt); updateAi(dt); }
+        drawTrack(); state.ai.forEach(drawKart); drawKart(state.player); updateHud(now); requestAnimationFrame(loop);
+      }
+
+      const press = (k) => keys.add(k.toLowerCase()), release = (k) => keys.delete(k.toLowerCase());
+      window.addEventListener('keydown', (e) => press(e.key)); window.addEventListener('keyup', (e) => release(e.key));
+
+      document.querySelectorAll('.mobile button[data-key]').forEach((btn) => {
+        btn.addEventListener('pointerdown', (e) => { const key = btn.dataset.key; touchMap.set(e.pointerId, key); press(key); });
+        const clear = (e) => { const key = touchMap.get(e.pointerId); if (!key) return; release(key); touchMap.delete(e.pointerId); };
+        btn.addEventListener('pointerup', clear); btn.addEventListener('pointercancel', clear); btn.addEventListener('lostpointercapture', clear);
+      });
+
+      restartBtn.addEventListener('click', () => { state = createState(); statusEl.textContent = 'Yarış sıfırlandı, bol şans!'; });
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>

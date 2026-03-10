@@ -1,19 +1,32 @@
 import { Title } from "solid-start";
-import Counter from "~/components/Counter";
 
 export default function Home() {
   return (
-    <main>
-      <Title>Hello World</Title>
-      <h1>Hello world!</h1>
-      <Counter />
-      <p>
-        Visit{" "}
-        <a href="https://start.solidjs.com" target="_blank">
-          start.solidjs.com
-        </a>{" "}
-        to learn how to build SolidStart apps.
-      </p>
+    <main class="kart-home">
+      <Title>Mini Kart</Title>
+      <section class="kart-card">
+        <h1>🏁 Mini Kart Oyunu</h1>
+        <p>
+          Oyun artık bağımsız bir <code>public/mario-kart/index.html</code> dosyasında.
+          Böylece npm bağımlılıklarına takılmadan localhost'ta açabilirsin.
+        </p>
+        <div class="links">
+          <a href="/mario-kart/index.html" target="_blank" rel="noreferrer">
+            Oyunu Aç
+          </a>
+        </div>
+        <ol>
+          <li>
+            Terminal: <code>cd public/mario-kart</code>
+          </li>
+          <li>
+            Terminal: <code>python3 -m http.server 4173</code>
+          </li>
+          <li>
+            Tarayıcı: <code>http://127.0.0.1:4173</code>
+          </li>
+        </ol>
+      </section>
     </main>
   );
 }
